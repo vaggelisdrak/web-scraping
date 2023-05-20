@@ -6,6 +6,7 @@ Created an automated desktop application for a client to scrape some info from a
 2) Based on the info from the given excel file, the app opens the gov website and fills the form, solves the reCAPTCHA and retrieves the data
 3) The scraped data are then stored to the same excel file accordingly
 
+
 Tech used:
 
 * Pandas
@@ -13,3 +14,5 @@ Tech used:
 * Tkinter
 * openpyxl 
 * twocaptcha API
+
+->Converted the Python app to an executable file using Pyinstaller
