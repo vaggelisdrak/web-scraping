@@ -16,3 +16,6 @@ Tech used:
 * twocaptcha API
 
 ->Converted the Python app to an executable file using Pyinstaller
+
+![image](https://github.com/vaggelisdrak/web-scraping/assets/71725114/35ecccdd-84fc-490d-8679-e62fccabd812)
+
