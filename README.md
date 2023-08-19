@@ -11,6 +11,7 @@ Tech used:
 
 * Pandas
 * Selenium
+* BeautifulSoup (for v2)
 * Tkinter
 * openpyxl 
 * twocaptcha API
