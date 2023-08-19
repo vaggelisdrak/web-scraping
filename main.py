@@ -21,7 +21,7 @@ def solveRecaptcha(sitekey, url, apikey):
         api_key = os.getenv('APIKEY_2CAPTCHA', str(apikey))
         print('input given')
     else:
-        api_key = os.getenv('APIKEY_2CAPTCHA', 'c4d89903f8d87a57e189a37dee1f02b5')
+        api_key = os.getenv('APIKEY_2CAPTCHA', 'API_KEY')
         print('no input given')
 
     solver = TwoCaptcha(api_key)
