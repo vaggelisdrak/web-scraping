@@ -3,37 +3,42 @@ from tkinter import ttk
 import tkinter
 from tkinter.filedialog import askopenfile
 from openpyxl import load_workbook
+from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
+import os
 import pandas as pd
+from twocaptcha import TwoCaptcha
 from seleniumbase import Driver
 
 root = Tk()
 root.geometry('130x260')
 
-def open_file(apikey,fromm,too,option):
-
-    file = askopenfile(mode ='r+', filetypes =[('Excel Files', '*.xlsx *.xlsm *.sxc *.ods *.csv *.tsv')]) # To open the file that you want. 
-    print(file.name)
-    wb = load_workbook(filename = file.name) # Load into openpyxl
-    wb2 = wb.active
-
-    #Whatever you want to do with the WorkSheet
-    #browser = webdriver.Chrome(ChromeDriverManager(version="116.0.5845.96").install())
-    browser = Driver(uc=True)
-    #read excel data
+# Function to check for the error message and reload the page
+def check_and_reload(driver):
+    error_message = "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+    console_logs = driver.get_log("browser")
     
-    # read by default 1st sheet of an excel file
-    dataframe1 = pd.read_excel(file.name)
+    for log in console_logs:
+        if error_message in log["message"]:
+            print("Detected ERR_INCOMPLETE_CHUNKED_ENCODING error. Reloading...")
+            driver.refresh()
+            return True
+    
+    return False
 
+def choose_option(option,dataframe1,mylist):
     if option == 'ΑΦΜ':
         mylist1 = dataframe1['Α.Φ.Μ.'].tolist()
         
         print(mylist1)
         print('\n')
 
-        mylist = []
         for i in mylist1:
             if len(str(i))<9:
                 j = '0'+str(i)
@@ -45,18 +50,67 @@ def open_file(apikey,fromm,too,option):
 
     elif option == 'ΕΠΩΝΥΜΙΑ':
         mylist1 = dataframe1['Επωνυμία Πελάτη'].tolist()
-        mylist = []
         for i in mylist1:
             mylist.append(str(i))
         print('\n\n')
         print(mylist)
     else:
         mylist1 = dataframe1['Διακριτικός τίτλος'].tolist()
-        mylist = []
         for i in mylist1:
             mylist.append(str(i))
         print('\n\n')
         print(mylist)
+    
+def save_data(file,afms,div_texts_dict,lst):
+    # Start by opening the spreadsheet and selecting the main sheet
+    workbook = load_workbook(filename=file.name)
+    sheet = workbook.active
+    # Write what you want into a specific cell in the excel file
+    k=0
+    for i in lst:
+        column= ['H','I','J','K','L','M','N','O','P','Q','R','S']
+        
+        value = list(div_texts_dict.keys())[list(div_texts_dict.values()).index(i)]
+
+        if value == "E-mail":
+            sheet['T'+str(int(afms)+2)] = str(i)
+        elif value == "Τηλέφωνο":
+            sheet['U'+str(int(afms)+2)] = str(i)
+        elif value.startswith("56."):
+            sheet['V'+str(int(afms)+2)] = str(i)
+        elif value == 'Επωνυμία':
+            sheet['W'+str(int(afms)+2)] = str(i)
+        else:
+            try:
+                sheet[column[k]+str(int(afms)+2)] = str(i)
+            except:
+                continue
+        k+=1
+
+    # Save the spreadsheet
+    workbook.save(filename=file.name)
+    pass
+
+def open_file(apikey,fromm,too,option):
+
+    file = askopenfile(mode ='r+', filetypes =[('Excel Files', '*.xlsx *.xlsm *.sxc *.ods *.csv *.tsv')]) # To open the file that you want. 
+    print(file.name)
+    wb = load_workbook(filename = file.name) # Load into openpyxl
+    wb2 = wb.active
+
+    #Whatever you want to do with the WorkSheet
+
+    #browser = webdriver.Chrome(ChromeDriverManager(version="116.0.5845.96").install())
+    browser = Driver(uc=True)
+
+    #read excel data
+    
+    # read by default 1st sheet of an excel file
+    dataframe1 = pd.read_excel(file.name)
+    mylist = []
+
+    # choose scraping option (by afm, by eponymia, by diakritikos titlos)
+    choose_option(option,dataframe1,mylist)
 
     #Start scraping the data
 
@@ -67,7 +121,9 @@ def open_file(apikey,fromm,too,option):
         afms =0
 
     if afms<int(too):
-            browser.get('https://www.businessregistry.gr/publicity/index')
+        browser.get('https://publicity.businessportal.gr/')
+        time.sleep(2)
+        check_and_reload(browser)
     else:
         root.quit()
 
@@ -97,12 +153,20 @@ def open_file(apikey,fromm,too,option):
         
         #phgaine sthn selida me ta details
         try:
-            browser.find_element(By.XPATH,'//*[@class="MuiCardContent-root css-1qw96cp"]/a/p').click() 
+            #browser.get('https://publicity.businessportal.gr/')
+            time.sleep(2)
+            check_and_reload(browser)
+            wait = WebDriverWait(browser, 3)  # max 3 seconds timeout
+            element = wait.until(EC.presence_of_element_located((By.XPATH,'//*[@class="MuiCardContent-root css-1qw96cp"]/a/p')))
+            element.click()
+            title = element.text
         except:
+            check_and_reload(browser)
             #an den yparxoyn dedomeno proxora sto epomeno afm
             workbook = load_workbook(filename=file.name)
             sheet = workbook.active
             sheet['H'+str(int(afms)+2)] = 'Δεν βρεθηκαν αποτελεσματα'
+            print("Δεν βρεθηκαν αποτελεσματα")
             workbook.save(filename=file.name)
             afms+=1
             continue
@@ -128,6 +192,9 @@ def open_file(apikey,fromm,too,option):
         # Initialize a dictionary to store the extracted div text
         div_texts_dict = {}
         lst = []
+
+        div_texts_dict['Επωνυμία'] = title
+        lst.append(title)
         # Loop through each row and extract the text from columns 1 and 2
         i=0
         for row in table_rows:
@@ -155,37 +222,14 @@ def open_file(apikey,fromm,too,option):
                     
         # Print the dictionary of div texts
         print(div_texts_dict)
-        #print(lst)
 
+        #save the data to excel file
+        save_data(file,afms,div_texts_dict,lst)
         
-        # Start by opening the spreadsheet and selecting the main sheet
-        workbook = load_workbook(filename=file.name)
-        sheet = workbook.active
-
-        # Write what you want into a specific cell in the excel file
-        k=0
-        for i in lst:
-            column= ['H','I','J','K','L','M','N','O','P','Q','R']
-            try:
-                value = list(div_texts_dict.keys())[list(div_texts_dict.values()).index(i)]
-                if value == "E-mail":
-                    sheet['S'+str(int(afms)+2)] = str(i)
-                elif value == "Τηλέφωνο":
-                    sheet['T'+str(int(afms)+2)] = str(i)
-                elif value.startswith("56."):
-                    sheet['U'+str(int(afms)+2)] = str(i)
-                else:
-                    sheet[column[k]+str(int(afms)+2)] = str(i)
-            except:
-                pass
-            k+=1
-
-        # Save the spreadsheet
-        workbook.save(filename=file.name)
-        
-        
+    
         #go to previous page
-        browser.get('https://www.businessregistry.gr/publicity/index')
+        browser.get('https://publicity.businessportal.gr/')
+        time.sleep(2)
         afms+=1
 
 #GUI
@@ -206,9 +250,6 @@ l4.grid(row=3,column=0)
 l4.current(0)
 
 btn = Button(root, text ='Open excel file', command = lambda: open_file(user_input.get(),fromm.get(),too.get(), l4.get()))
-
-#l1.grid(row = 0, column = 0,  pady = 2)
-#e1.grid(row = 1, column = 0,  pady = 2)
 
 l2.grid(row = 2, column = 0,  pady = 2 )
 e2.grid(row = 3, column = 0,  pady = 2)

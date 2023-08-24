@@ -1,22 +1,34 @@
 from tkinter import *
-from tkinter import ttk
 import tkinter
 from tkinter.filedialog import askopenfile
 from openpyxl import load_workbook
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import time
-import pandas as pd
 from seleniumbase import Driver
 
-root = Tk()
 browser = Driver(uc=True)
 #root.geometry('275x85')
+file = askopenfile(mode ='r+', filetypes =[('Excel Files', '*.xlsx *.xlsm *.sxc *.ods *.csv *.tsv')]) # To open the file that you want. 
+print(file.name)
 
 def open_website():
-    browser.get('https://www.businessregistry.gr/publicity/index')
+    browser.get('https://publicity.businessportal.gr/')
 
-
+# Function to check for the error message and reload the page
+def check_and_reload(driver):
+    error_message = "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+    console_logs = driver.get_log("browser")
+    
+    for log in console_logs:
+        if error_message in log["message"]:
+            print("Detected ERR_INCOMPLETE_CHUNKED_ENCODING error. Reloading...")
+            driver.refresh()
+            return True
+    
+    return False
 
 def scrape_data():
     #Start scraping the data
@@ -37,7 +49,7 @@ def scrape_data():
     lst_of_dict = []
 
     while True:
-        time.sleep(1)
+        time.sleep(2)
         #button_class = '//*[@id="vertical-tabpanel-0"]/div/div/div/div[1]/nav/ul/li[9]/button'
        # Find and click the last li button using XPath
         
@@ -46,16 +58,39 @@ def scrape_data():
         for i in range(1,11):
             if i==1:
                 try:
-                    browser.find_element(By.XPATH,'//*[@class="MuiCardContent-root css-1qw96cp"]/a').click() 
+                    element = browser.find_element(By.XPATH,'//*[@class="MuiCardContent-root css-1qw96cp"]/a')
+                    element.click()
+                    title = element.text
                 except:
-                    browser.find_element(By.XPATH,'//*[@class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root css-s18byi"][' + str(i) + ']/div/a/p').click() 
-                scrape_data_details(lst_of_dict)
+                    try:
+                        check_and_reload(browser)
+                        wait = WebDriverWait(browser, 2)  # max 10 seconds timeout
+                        element = wait.until(EC.presence_of_element_located((By.XPATH,'//*[@class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root css-s18byi"][' + str(i) + ']/div/a/p')))
+                        element.click()
+                        title = element.text
+                    except:      
+                        # Refresh the page
+                        check_and_reload(browser)
+                        wait = WebDriverWait(browser, 2)  # max 10 seconds timeout
+                        element = wait.until(EC.presence_of_element_located((By.XPATH,'//*[@class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root css-s18byi"][' + str(i) + ']/div/a/p')))
+                        element.click()
+                        title = element.text
+                scrape_data_details(lst_of_dict,title)
             else:
                 try:
-                    browser.find_element(By.XPATH,'//*[@class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root css-s18byi"][' + str(i) + ']/div/a/p').click() 
-                    scrape_data_details(lst_of_dict)
+                    check_and_reload(browser)
+                    wait = WebDriverWait(browser, 2)  # max 10 seconds timeout
+                    element = wait.until(EC.presence_of_element_located((By.XPATH,'//*[@class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root css-s18byi"][' + str(i) + ']/div/a/p')))
+                    element.click()
+                    title = element.text
                 except:
-                    print("no more data in this page")
+                    # Refresh the page
+                    check_and_reload(browser)
+                    wait = WebDriverWait(browser, 2)  # max 10 seconds timeout
+                    element = wait.until(EC.presence_of_element_located((By.XPATH,'//*[@class="MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root css-s18byi"][' + str(i) + ']/div/a/p')))
+                    element.click()
+                    title = element.text
+                scrape_data_details(lst_of_dict,title)
 
         try:  
             time.sleep(1)
@@ -70,30 +105,8 @@ def scrape_data():
             break
 
     print(lst_of_dict)
-    # Convert the list of dictionaries to a DataFrame
-    '''df = pd.DataFrame(lst_of_dict)
-
-    # Save the DataFrame to an Excel file
-    excel_file = 'scraped_filtered_data.xlsx'
-    df.to_excel(excel_file, index=False)  # index=False to exclude row numbers'''
-
-    excel_file = 'scraped_data.xlsx'
-    # Read existing Excel file into a DataFrame
-    try:
-        df = pd.read_excel(excel_file)
-    except FileNotFoundError:
-        df = pd.DataFrame()  # Create an empty DataFrame if the file doesn't exist
     
-    # Append the scraped dictionary as a new row
-    try:
-        df = df.append(lst_of_dict, ignore_index=True)
-    except:pass
-    
-    # Save the updated DataFrame to the Excel file
-    df.to_excel(excel_file, index=False)  # index=False to exclude row numbers
-
-def scrape_data_details(lst_of_dict):
-
+def scrape_data_details(lst_of_dict,title):
     time.sleep(2)
 
     #get data from table
@@ -115,6 +128,30 @@ def scrape_data_details(lst_of_dict):
     # Initialize a dictionary to store the extracted div text
     div_texts_dict = {}
     lst = []
+
+    # get title
+    time.sleep(2)
+    if not title:
+        try:
+            h4_element = soup.find('h4', class_='MuiTypography-root MuiTypography-h4 css-1xvinid')
+            text = h4_element.get_text()
+        except:
+            try:
+                element = browser.find_element(By.XPATH,'//*[@id="__next"]/div[2]/div[1]/div/h4')
+                text = element.text
+            except:
+                pass
+
+        print(text)
+        div_texts_dict["Eπωνυμία"] = text
+        lst.append(text)
+    else:
+        text = title
+        print(text)
+        div_texts_dict["Eπωνυμία"] = text
+        lst.append(text)
+
+
     # Loop through each row and extract the text from columns 1 and 2
     i=0
     for row in table_rows:
@@ -134,9 +171,10 @@ def scrape_data_details(lst_of_dict):
                 if column1_text == "E-mail" or column1_text == "Τηλέφωνο":
                     div_texts_dict[column1_text] = column2_text
                     lst.append(column2_text)
-                elif column1_text.startswith("56."):
-                    div_texts_dict[column1_text] = column2_text
-                    lst.append(column2_text)
+                elif len(column1_text) >= 3:
+                    if column1_text[2] == '.':
+                        div_texts_dict[column1_text] = column2_text
+                        lst.append(column2_text)
                 else:
                     pass
                 
@@ -144,12 +182,33 @@ def scrape_data_details(lst_of_dict):
     print(div_texts_dict)
     lst_of_dict.append(div_texts_dict)
 
-    #print(lst)
-    browser.get('https://www.businessregistry.gr/publicity/index')
+    # Start by opening the spreadsheet and selecting the main sheet
+    workbook = load_workbook(filename=file.name)
+    sheet = workbook.active
+
+    # Find the last row in the Excel sheet
+    last_row = sheet.max_row + 1
+
+    # Write what you want into a specific cell in the excel file
+    # Dictionary keys in the same order as the columns in the sheet
+    dictionary_keys = list(div_texts_dict.keys())  # Add all keys here
+
+    # Write dictionary values to corresponding cells in the last row
+    for column_index, key in enumerate(dictionary_keys, start=1):
+        cell = sheet.cell(row=last_row, column=column_index)
+        cell.value = div_texts_dict.get(key, '')
+    
+
+    # Save the spreadsheet
+    workbook.save(filename=file.name)
+    
+
+    browser.get('https://publicity.businessportal.gr/')
 
         
-
 #GUI
+
+root = Tk()
 
 user_input = tkinter.StringVar(root)
 fromm = tkinter.StringVar(root)
